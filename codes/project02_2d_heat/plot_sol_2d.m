@@ -17,3 +17,5 @@ surf(X, Y, Z);
 az = -61;
 el = 20;
 view(az,el);
+
+% EOF

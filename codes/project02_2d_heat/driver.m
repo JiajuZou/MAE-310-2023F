@@ -10,28 +10,28 @@ exact_y = @(x,y) x*(1-x)*(1-2*y);
 f = @(x,y) -2*x*(x-1)-2*y*(y-1);
 
 % quadrature rule
-n_int_xi  = 3;
-n_int_eta = 3;
+n_int_xi  = 3;              % number of quadrature points in xi-direction
+n_int_eta = 3;              % number of quadrature points in eta-direction
 n_int     = n_int_xi * n_int_eta;
 [xi, eta, weight] = Gauss2D(n_int_xi, n_int_eta);
 
 % FEM mesh settings
-n_en = 4; % 4-node quadrilateral element
+n_en = 4;                   % 4-node quadrilateral element
 
 n_el_x = 200;               % number of element in x-direction
 n_el_y = 200;               % number of element in y-direction
-n_el   = n_el_x * n_el_y; % total number of element in 2D domain
+n_el   = n_el_x * n_el_y;   % total number of element in 2D domain
 
-n_np_x = n_el_x + 1;      % number of node points in x-direction
-n_np_y = n_el_y + 1;      % number of node points in y-direction
-n_np   = n_np_x * n_np_y; % total number of node points in 2D domain
+n_np_x = n_el_x + 1;        % number of node points in x-direction
+n_np_y = n_el_y + 1;        % number of node points in y-direction
+n_np   = n_np_x * n_np_y;   % total number of node points in 2D domain
 
 % generate the coordinates of the nodal points
 x_coor = zeros(n_np, 1);
 y_coor = zeros(n_np, 1);
 
-hh_x = 1 / n_el_x;        % mesh size in the x-direction
-hh_y = 1 / n_el_y;        % mesh size in the y-direction
+hh_x = 1 / n_el_x;          % mesh size in the x-direction
+hh_y = 1 / n_el_y;          % mesh size in the y-direction
 
 for ny = 1 : n_np_y
   for nx = 1 : n_np_x
@@ -81,15 +81,12 @@ for ee = 1 : n_el
    k_ele = zeros(n_en, n_en);
    f_ele = zeros(n_en, 1);
 
-   x_ele = zeros(n_en, 1);
-   y_ele = x_ele;
-   for aa = 1 : n_en
-     x_ele(aa) = x_coor( IEN(aa,ee) );
-     y_ele(aa) = y_coor( IEN(aa,ee) );
-   end
+   x_ele = x_coor( IEN(1:n_en, ee) );
+   y_ele = y_coor( IEN(1:n_en, ee) );
 
    % loop over quadrature points   
    for ll = 1 : n_int
+     % we need the geometric mapping at each quadrature points
      x_l = 0.0; y_l = 0.0;
      dx_dxi = 0.0; dx_deta = 0.0;
      dy_dxi = 0.0; dy_deta = 0.0;
@@ -105,8 +102,13 @@ for ee = 1 : n_el
 
      detJ = dx_dxi * dy_deta - dx_deta * dy_dxi;
 
+     % we loop over a and b to assemble the element stiffness matrix and load
+     % vector
      for aa = 1 : n_en
        [Na_xi, Na_eta] = Quad_grad(aa, xi(ll), eta(ll));
+
+       % See page 147 of Sec. 3.9 of the textbook for the shape function
+       % routine details
        Na_x = (Na_xi * dy_deta    - Na_eta * dy_dxi) / detJ;
        Na_y = (Na_xi * (-dx_deta) + Na_eta * dx_dxi)  / detJ;
 
@@ -116,8 +118,8 @@ for ee = 1 : n_el
          Nb_x = (Nb_xi * dy_deta    - Nb_eta * dy_dxi) / detJ;
          Nb_y = (Nb_xi * (-dx_deta) + Nb_eta * dx_dxi)  / detJ;
 
-         k_ele(aa,bb) = k_ele(aa,bb) + weight(ll) * detJ * kappa *...
-           ( Na_x * Nb_x + Na_y * Nb_y);
+         k_ele(aa,bb) = k_ele(aa,bb) + weight(ll) * detJ * kappa * ( Na_x * Nb_x + Na_y * Nb_y);
+
        end % end of bb-loop
      end % end of aa-loop
    end % end of quadrature loop
@@ -139,9 +141,12 @@ for ee = 1 : n_el
    end
 end % end of element loop
 
+% solve the linear system
 d_temp = K \ F;
+
 disp = zeros(n_np, 1);
 
+% insert the solution vector back with the g-data
 for ii = 1 : n_np
   index = ID(ii);
   if index > 0
