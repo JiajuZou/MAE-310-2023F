@@ -1,13 +1,22 @@
 clear all; clc;
 
 kappa = 1.0; % isotropic homogeneous heat conductivity
+rho   = 1.0; % density
+cap   = 1.0; % heat capacity
 
 % manufactured solution and source term
 exact   = @(x,y) x*(1-x)*y*(1-y);
 exact_x = @(x,y) (1-2*x)*y*(1-y);
 exact_y = @(x,y) x*(1-x)*(1-2*y);
 
-f = @(x,y) -2*x*(x-1)-2*y*(y-1);
+%f = @(x,y) -2*x*(x-1)-2*y*(y-1);
+
+alpha = 0.5;
+
+T_final = 10.0;
+dt      = 0.1;
+t       = 0 : dt : T_final; % time sub-interval
+NN      = T_final / dt;
 
 % quadrature rule
 n_int_xi  = 3;              % number of quadrature points in xi-direction
@@ -75,10 +84,12 @@ LM = ID(IEN);
 
 % Start the assembly procedure
 K = spalloc(n_eq, n_eq, 9*n_eq);
+M = K;
 F = zeros(n_eq, 1);
 
 for ee = 1 : n_el
    k_ele = zeros(n_en, n_en);
+   m_ele = zeros(n_en, n_en);
    f_ele = zeros(n_en, 1);
 
    x_ele = x_coor( IEN(1:n_en, ee) );
@@ -105,6 +116,7 @@ for ee = 1 : n_el
      % we loop over a and b to assemble the element stiffness matrix and load
      % vector
      for aa = 1 : n_en
+       Na = Quad(aa, xi(ll), eta(ll));
        [Na_xi, Na_eta] = Quad_grad(aa, xi(ll), eta(ll));
 
        % See page 147 of Sec. 3.9 of the textbook for the shape function
@@ -114,10 +126,12 @@ for ee = 1 : n_el
 
        f_ele(aa) = f_ele(aa) + weight(ll) * detJ * f(x_l, y_l) * Quad(aa, xi(ll), eta(ll));
        for bb = 1 : n_en
+         Nb = Quad(bb, xi(ll), eta(ll));
          [Nb_xi, Nb_eta] = Quad_grad(bb, xi(ll), eta(ll));
          Nb_x = (Nb_xi * dy_deta    - Nb_eta * dy_dxi) / detJ;
          Nb_y = (Nb_xi * (-dx_deta) + Nb_eta * dx_dxi)  / detJ;
 
+         m_ele(aa,bb) = m_ele(aa,bb) + weight(ll) * detJ * rho * cap * Na * Nb;
          k_ele(aa,bb) = k_ele(aa,bb) + weight(ll) * detJ * kappa * ( Na_x * Nb_x + Na_y * Nb_y);
 
        end % end of bb-loop
@@ -132,6 +146,7 @@ for ee = 1 : n_el
        for bb = 1 : n_en
          QQ = LM(bb, ee);
          if QQ > 0
+           M(PP, QQ) = M(PP, QQ) + m_ele(aa, bb);
            K(PP, QQ) = K(PP, QQ) + k_ele(aa, bb);
          else
            % do something for non-zero g boundary condition
@@ -141,20 +156,43 @@ for ee = 1 : n_el
    end
 end % end of element loop
 
-% solve the linear system
-d_temp = K \ F;
-
+% set initial conditions
+dn = zeros(n_eq, 1);   % initial temperature is zero
+vn = M \ (F - K * dn); % solve M matrix to determine vn at initial time
 disp = zeros(n_np, 1);
 
 % insert the solution vector back with the g-data
 for ii = 1 : n_np
   index = ID(ii);
   if index > 0
-    disp(ii) = d_temp(index);
+    disp(ii) = dn(index);
   end
 end
+save("HEAT"+int2str(1000000), "disp", "n_el_x", "n_el_y");
 
-% save the solution to file
-save("FEM_solution", "disp", "n_el_x", "n_el_y", "exact", "exact_x", "exact_y");
+LEFT = M + alpha * dt * K;
+
+for n = 1 : NN
+  % prediction
+  tilde_d = dn + (1-alpha) * dt * vn;
+  
+  % correction
+  RIGHT = F - K * tilde_d;
+  vn = LEFT \ RIGHT;
+  dn = tilde_d + alpha * dt * vn;
+ 
+  disp = zeros(n_np, 1);
+
+  % insert the solution vector back with the g-data
+  for ii = 1 : n_np
+    index = ID(ii);
+    if index > 0
+      disp(ii) = dn(index);
+    end
+  end
+  
+  % save the solution to file
+  save("HEAT"+int2str(1000000+n), "disp", "n_el_x", "n_el_y");
+end
 
 % EOF

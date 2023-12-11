@@ -1,6 +1,6 @@
 clear all; clc; clf;
 
-load("FEM_solution.mat");
+load("HEAT1000100.mat");
 
 hh_x = 1.0 / n_el_x;
 hh_y = 1.0 / n_el_y;
@@ -12,7 +12,7 @@ n_np_y = n_el_y + 1;
 Z = reshape(disp, n_np_x, n_np_y);
 surf(X, Y, Z);
 
-%shading interp
+shading interp
 
 az = -61;
 el = 20;
